@@ -276,6 +276,7 @@
 
   <div class="container" id="tournament-container"></div>
 
+  <!-- Modal Auth -->
   <div class="modal-overlay" id="auth-modal">
     <div class="modal">
       <h3>Código de Administrador</h3>
@@ -287,6 +288,7 @@
     </div>
   </div>
 
+  <!-- Modal Admin Controls -->
   <div class="modal-overlay" id="admin-panel-modal">
     <div class="modal">
       <h3>Gestión de Torneo</h3>
@@ -311,5 +313,174 @@
 
   <script>
     const PASS = "123456789";
-    let matches
-    
+    let matches = JSON.parse(localStorage.getItem('rtw_rys_matches')) || [
+      { id: 1, rtwPlayer: "Jugador A1", rysPlayer: "Jugador B1", rtwScore: 0, rysScore: 0, status: "no-iniciado", winner: "none" }
+    ];
+
+    // Corregir automáticos de sesiones anteriores
+    matches = matches.map(m => {
+      if (m.status === 'pendiente') m.status = 'no-iniciado';
+      if (m.status === 'en-progreso') m.status = 'en-curso';
+      return m;
+    });
+
+    function saveState() {
+      localStorage.setItem('rtw_rys_matches', JSON.stringify(matches));
+      render();
+    }
+
+    function openAuthModal() {
+      document.getElementById('admin-pass').value = '';
+      document.getElementById('auth-modal').style.display = 'flex';
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).style.display = 'none';
+    }
+
+    function checkAuth() {
+      const input = document.getElementById('admin-pass').value;
+      if (input === PASS) {
+        closeModal('auth-modal');
+        renderAdminPanel();
+        document.getElementById('admin-panel-modal').style.display = 'flex';
+      } else {
+        alert("Código incorrecto");
+      }
+    }
+
+    function addMatch() {
+      const rtwP = document.getElementById('new-rtw-player').value.trim();
+      const rysP = document.getElementById('new-rys-player').value.trim();
+      if (!rtwP || !rysP) return alert("Ingresa ambos nombres de jugador");
+
+      matches.push({
+        id: Date.now(),
+        rtwPlayer: rtwP,
+        rysPlayer: rysP,
+        rtwScore: 0,
+        rysScore: 0,
+        status: "no-iniciado",
+        winner: "none"
+      });
+
+      document.getElementById('new-rtw-player').value = '';
+      document.getElementById('new-rys-player').value = '';
+      saveState();
+      renderAdminPanel();
+    }
+
+    function removeMatch(id) {
+      matches = matches.filter(m => m.id !== id);
+      saveState();
+      renderAdminPanel();
+    }
+
+    function updateMatch(id, field, value) {
+      const match = matches.find(m => m.id === id);
+      if (!match) return;
+
+      if (field === 'rtwScore' || field === 'rysScore') {
+        let val = parseInt(value, 10);
+        if (isNaN(val)) val = 0;
+        if (val < 0) val = 0;
+        if (val > 999) val = 999;
+        match[field] = val;
+      } else {
+        match[field] = value;
+      }
+      saveState();
+    }
+
+    function renderAdminPanel() {
+      const container = document.getElementById('admin-matches-list');
+      container.innerHTML = '';
+
+      matches.forEach((m, idx) => {
+        const div = document.createElement('div');
+        div.className = 'admin-item';
+        div.innerHTML = `
+          <strong>Set #${idx + 1}: ${m.rtwPlayer} vs ${m.rysPlayer}</strong>
+          <div class="grid-2" style="margin-top: 8px;">
+            <div>
+              <label>Puntos RTW (0-999):</label>
+              <input type="number" min="0" max="999" value="${m.rtwScore}" oninput="updateMatch(${m.id}, 'rtwScore', this.value)">
+            </div>
+            <div>
+              <label>Puntos RYS (0-999):</label>
+              <input type="number" min="0" max="999" value="${m.rysScore}" oninput="updateMatch(${m.id}, 'rysScore', this.value)">
+            </div>
+          </div>
+          <div class="grid-2">
+            <div>
+              <label>Estado actual:</label>
+              <select onchange="updateMatch(${m.id}, 'status', this.value)">
+                <option value="no-iniciado" ${m.status === 'no-iniciado' ? 'selected' : ''}>Aún no iniciado (Gris)</option>
+                <option value="en-curso" ${m.status === 'en-curso' ? 'selected' : ''}>En curso (Naranja)</option>
+                <option value="finalizado" ${m.status === 'finalizado' ? 'selected' : ''}>Finalizado (Verde)</option>
+              </select>
+            </div>
+            <div>
+              <label>Resultado / Ganador:</label>
+              <select onchange="updateMatch(${m.id}, 'winner', this.value)">
+                <option value="none" ${m.winner === 'none' ? 'selected' : ''}>Sin definir</option>
+                <option value="rtw" ${m.winner === 'rtw' ? 'selected' : ''}>Ganó RTW (RTW WIN / RYS LOSE)</option>
+                <option value="rys" ${m.winner === 'rys' ? 'selected' : ''}>Ganó RYS (RYS WIN / RTW LOSE)</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn-danger" style="margin-top: 5px; width:100%;" onclick="removeMatch(${m.id})">Eliminar Reta</button>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    function render() {
+      const container = document.getElementById('tournament-container');
+      container.innerHTML = '';
+
+      matches.forEach(m => {
+        let rtwTag = '';
+        let rysTag = '';
+
+        if (m.winner === 'rtw') {
+          rtwTag = `<span class="tag-win">WIN</span>`;
+          rysTag = `<span class="tag-lose">LOSE</span>`;
+        } else if (m.winner === 'rys') {
+          rtwTag = `<span class="tag-lose">LOSE</span>`;
+          rysTag = `<span class="tag-win">WIN</span>`;
+        }
+
+        let statusBadge = '';
+        if (m.status === 'en-curso') {
+          statusBadge = `<span class="status-badge status-en-curso">En curso</span>`;
+        } else if (m.status === 'finalizado') {
+          statusBadge = `<span class="status-badge status-finalizado">Finalizado</span>`;
+        } else {
+          statusBadge = `<span class="status-badge status-no-iniciado">Aún no iniciado</span>`;
+        }
+
+        const card = document.createElement('div');
+        card.className = 'reta-card';
+        card.innerHTML = `
+          <div class="player-box left">
+            <span class="player-name">${m.rtwPlayer}</span>
+            ${rtwTag}
+          </div>
+          <div class="score-center">
+            ${statusBadge}
+            <div class="score-text">${m.rtwScore} - ${m.rysScore}</div>
+          </div>
+          <div class="player-box right">
+            ${rysTag}
+            <span class="player-name">${m.rysPlayer}</span>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    render();
+  </script>
+</body>
+</html>
